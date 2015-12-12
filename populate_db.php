@@ -1,12 +1,102 @@
 <?php
 
-class PopulateDb {
+die('The script is dangerous to your database as it will be filled with some random data. If You accept that - remove this code line and go to random mass of data!')
+
+
+class RandomValue {
 
     private $Pdo = null;
 
-    public function __construct($Pdo)
+    public function __construct(\PDO $Pdo)
     {
         $this->Pdo = $Pdo;
+    }
+
+    public function getTableValueDatetime($size, $fieldData, $unixFrom = 1, $unixTo = 2899849848) {
+        $timestamp = mt_rand($unixFrom, $unixTo);
+
+        return date("Y-m-d H:i:s", $timestamp);
+
+    }
+
+    public function getTableValueChar($size, $fieldData) {
+
+        $size = mt_rand(0,$size); // char could be smaller
+
+        $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ';
+        $charactersLength = strlen($characters);
+        $randomString = '';
+        for ($i = 0; $i < $size; $i++) {
+            $randomString .= $characters[rand(0, $charactersLength - 1)];
+        }
+        return $randomString;
+    }
+
+    public function getTableValueVarchar($size, $fieldData) {
+        return $this->getTableValueChar($size, $fieldData);
+    }
+
+    function unichr($i)
+    {
+        return iconv('UCS-4LE', 'UTF-8', pack('V', $i));
+    }
+
+    public function getTableValueText($size, $fieldData, $defaultSize = 65535) {
+
+        $size = isset($size) && ($size !== '') ? $size : $defaultSize;
+
+        $size = mt_rand(0,$size); // char could be smaller
+
+        $characters = '`ąčęėįšųū90-ž\\qwertyuiop[]asdfghjkl;\'`zxcvbnm,./7894561230,~ĄČĘĖĮŠŲŪ()_Ž|QWERTYUIOP{}ASDFGHJKL:"ZXCVBNM<>?';
+
+        $charactersLength = strlen($characters);
+        $randomString = '';
+        for ($i = 0; $i < $size; $i++) {
+            if((rand(0,100) == 0)) { // Every about 100th line let`s be empty
+                return '';
+            }
+            $randomString .= $characters[rand(0, $charactersLength - 1)] . ((rand(0,45) == 0) ? ' ' : '') . ((rand(0,45*200) == 0) ? "\n" : ''); // + Add space every about 45 letters as the longest word in englis is 45 letters (Pneumonoultramicroscopicsilicovolcanoconiosis)
+        }
+        return $randomString;
+
+
+    }
+
+    public function getTableValueMediumtext($size, $fieldData) {
+        return $this->getTableValueText($size, $fieldData, $defaultSize = 98765); // The real value of 16777215 is to much for 'for'
+    }
+
+    public function getTableValueTinyint($size, $fieldData) {
+        return $this->getTableValueInt($size, $fieldData);
+    }
+
+    public function getTableValueSmallint($size, $fieldData) {
+        return $this->getTableValueInt($size, $fieldData);
+    }
+
+    public function getTableValueInt($size, $fieldData) {
+        if(true) { // @todo: signed | unsigned?
+            return mt_rand(-2147483648,2147483647);
+        } else {
+            return mt_rand(0,4294967295);
+        }
+    }
+
+    public function getTableValueBigint($size, $fieldData) {
+        return $this->getTableValueInt($size, $fieldData);
+    }
+
+}
+
+class PopulateDb {
+
+    private $Pdo = null;
+    private $RandomValue = null;
+
+    public function __construct(\PDO $Pdo, \RandomValue $RandomValue)
+    {
+        $this->Pdo = $Pdo;
+        $this->randomValueObj = $RandomValue;
     }
 
     public function getAllTablesOfDb($dbName) {
@@ -71,72 +161,58 @@ class PopulateDb {
         $methodName = 'getTableValue' . ucfirst(strtolower($type));
 
         $generatedValue = null;
-        if(method_exists($this, $methodName)) {
-            $generatedValue = $this->$methodName($typeSize, $fieldData);
+        if(method_exists($this->randomValueObj, $methodName)) {
+            $generatedValue = $this->randomValueObj->$methodName($typeSize, $fieldData);
         } else {
             die('No method: ' . $methodName);
         }
 
-        var_dump($methodName . ': ' . $generatedValue);
-
         return $generatedValue;
-    }
-
-
-
-    private function getTableValueDatetime($size, $fieldData) {
-
-    }
-
-    private function getTableValueChar($size, $fieldData) {
-
-    }
-
-    private function getTableValueVarchar($size, $fieldData) {
-
-    }
-
-    private function getTableValueText($size, $fieldData) {
-
-    }
-
-    private function getTableValueMediumtext($size, $fieldData) {
-
-    }
-
-    private function getTableValueTinyint($size, $fieldData) {
-
-    }
-
-    private function getTableValueSmallint($size, $fieldData) {
-
-    }
-
-    private function getTableValueInt($size, $fieldData) {
-
-    }
-
-    private function getTableValueBigint($size, $fieldData) {
 
     }
 
 
 
-    public function populateTable($tableName) {
+
+
+
+
+    public function populateTable($tableName, $entriesCount = 100) {
         if(!$tableName) {
             return;
         }
 
         $tblDescription = $this->getTableDescription($tableName);
 
-        foreach($tblDescription as $fieldData) {
-            $value = $this->getGeneratedFieldValue($fieldData);
-            //var_dump($value);
-            //return $value;
+        $template = 'INSERT INTO `' . $tableName . '` ({{COLUMNS}}) VALUES ({{VALUES}});';
+
+        for($i = 0; $i <= $entriesCount; $i++) {
+
+            $columns = array();
+            $values = array();
+
+            foreach($tblDescription as $fieldData) {
+                $columns[] = '`' . $fieldData->Field . '`';
+                $values[] = '\'' . $this->getGeneratedFieldValue($fieldData) . '\'';
+            }
+
+            $q = strtr($template, array(
+                '{{COLUMNS}}' => implode(',', $columns),
+                '{{VALUES}}' => implode(',', $values)
+            ));
+
+            //$PdoStatement =
+
+            //print_r($q); die();
+
+            $this->Pdo->prepare($q)->execute();
+            //$PdoStatement->bindParam(':dbName', $dbName, PDO::PARAM_STR);
+            //$PdoStatement->execute();
+            //$tablesStr = @reset($PdoStatement->fetch(PDO::FETCH_ASSOC));
+            //$tables = explode(',', $tablesStr);
+
         }
 
-
-        var_dump($tblDescription);
 
     }
 
@@ -160,8 +236,10 @@ $dbName = "pdarbais";
 $dbUsername = "pdarbais";
 $dbPassword = "pdarbais";
 $tables = array();
+$randomRowsPerTableCount = 1000;
 
-$Pdb = new PopulateDb(new PDO("mysql:host=$dbHost;dbname=$dbName",$dbUsername,$dbPassword));
+$Pdo = new PDO("mysql:host=$dbHost;dbname=$dbName",$dbUsername,$dbPassword);
+$Pdb = new PopulateDb($Pdo, new RandomValue($Pdo));
 
 
 // Get tables
@@ -170,7 +248,7 @@ if(empty($tables)) { // Get all tables of $dbName
 }
 
 foreach($tables as $tableName) {
-    $Pdb->populateTable($tableName);
+    $Pdb->populateTable($tableName, $randomRowsPerTableCount);
 }
 
 
