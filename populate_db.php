@@ -1,6 +1,6 @@
 <?php
 
-die('The script is dangerous to your database as it will be filled with some random data. If You accept that - remove this code line and go to random mass of data!')
+die('The script is dangerous to your database as it will be filled with some random data. If You accept that - remove this code line and go to random mass of data!');
 
 
 class RandomValue {
