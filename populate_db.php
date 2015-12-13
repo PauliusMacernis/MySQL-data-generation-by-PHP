@@ -1,6 +1,6 @@
 <?php
 
-die('The script is dangerous to your database as it will be filled with some random data. If You accept that - remove this code line and go to random mass of data!');
+die('The script is dangerous to your database, because it will be filled with many random rows. If You accept that then remove this code line and go to the random mass of data.');
 
 
 class RandomValue {
@@ -47,14 +47,16 @@ class RandomValue {
 
         $size = mt_rand(0,$size); // char could be smaller
 
-        $characters = '`ąčęėįšųū90-ž\\qwertyuiop[]asdfghjkl;\'`zxcvbnm,./7894561230,~ĄČĘĖĮŠŲŪ()_Ž|QWERTYUIOP{}ASDFGHJKL:"ZXCVBNM<>?';
+        $characters = array('','`','ą','č','ę','ė','į','š','ų','ū','9','0','-','ž','\\','q','w','e','r','t','y','u','i','o','p','[',']','a','s','d','f','g','h','j','k','l',';','\'','`','z','x','c','v','b','n','m','','','.','/','7','8','9','4','5','6','1','2','3','0','','','~','Ą','Č','Ę','Ė','Į','Š','Ų','Ū','(',')','_','Ž','|','Q','W','E','R','T','Y','U','I','O','P','{','}','A','S','D','F','G','H','J','K','L',':','"','Z','X','C','V','B','N','M','<','>','?');
 
-        $charactersLength = strlen($characters);
+        $charactersLength = count($characters);
         $randomString = '';
+
+        if((rand(0,10) == 0)) { // Every about 10th line let`s be empty
+            return '';
+        }
+
         for ($i = 0; $i < $size; $i++) {
-            if((rand(0,100) == 0)) { // Every about 100th line let`s be empty
-                return '';
-            }
             $randomString .= $characters[rand(0, $charactersLength - 1)] . ((rand(0,45) == 0) ? ' ' : '') . ((rand(0,45*200) == 0) ? "\n" : ''); // + Add space every about 45 letters as the longest word in englis is 45 letters (Pneumonoultramicroscopicsilicovolcanoconiosis)
         }
         return $randomString;
@@ -67,15 +69,31 @@ class RandomValue {
     }
 
     public function getTableValueTinyint($size, $fieldData) {
-        return $this->getTableValueInt($size, $fieldData);
+        if($this->fieldIsSigned($fieldData)) {
+            return mt_rand(-128,127);
+        } else {
+            return mt_rand(0,255);
+        }
     }
 
     public function getTableValueSmallint($size, $fieldData) {
-        return $this->getTableValueInt($size, $fieldData);
+        if($this->fieldIsSigned($fieldData)) {
+            return mt_rand(-32768,32767);
+        } else {
+            return mt_rand(0,65535);
+        }
+    }
+
+    public function getTableValueMediumint($size, $fieldData) {
+        if($this->fieldIsSigned($fieldData)) {
+            return mt_rand(-8388608,8388607);
+        } else {
+            return mt_rand(0,16777215);
+        }
     }
 
     public function getTableValueInt($size, $fieldData) {
-        if(true) { // @todo: signed | unsigned?
+        if($this->fieldIsSigned($fieldData)) {
             return mt_rand(-2147483648,2147483647);
         } else {
             return mt_rand(0,4294967295);
@@ -83,7 +101,20 @@ class RandomValue {
     }
 
     public function getTableValueBigint($size, $fieldData) {
-        return $this->getTableValueInt($size, $fieldData);
+        if($this->fieldIsSigned($fieldData)) {
+            return mt_rand(-9223372036854775808,9223372036854775807);
+        } else {
+            return mt_rand(0,18446744073709551615);
+        }
+    }
+
+    protected function fieldIsSigned($fieldData) {
+
+        if(!$fieldData) {
+            return false;
+        }
+
+        return true;
     }
 
 }
@@ -189,23 +220,38 @@ class PopulateDb {
         for($i = 0; $i <= $entriesCount; $i++) {
 
             $columns = array();
+            $valuesForBind = array();
             $values = array();
 
             foreach($tblDescription as $fieldData) {
-                $columns[] = '`' . $fieldData->Field . '`';
-                $values[] = '\'' . $this->getGeneratedFieldValue($fieldData) . '\'';
+                if($fieldData->Extra == 'auto_increment') {
+                    continue;
+                }
+                $columns[$fieldData->Field] = '`' . $fieldData->Field . '`';
+                $valuesForBind[$fieldData->Field] = ':' . $fieldData->Field;
+                //$values[$fieldData->Field] = '\'' . $this->getGeneratedFieldValue($fieldData) . '\'';
+
             }
 
             $q = strtr($template, array(
                 '{{COLUMNS}}' => implode(',', $columns),
-                '{{VALUES}}' => implode(',', $values)
+                '{{VALUES}}' => implode(',', $valuesForBind)
             ));
+
+            $sth = $this->Pdo->prepare($q);
+
+            foreach($tblDescription as $fieldData) {
+                if(!isset($valuesForBind[$fieldData->Field])) {
+                    continue;
+                }
+                $sth->bindValue($valuesForBind[$fieldData->Field], $this->getGeneratedFieldValue($fieldData), PDO::PARAM_STR);
+            }
 
             //$PdoStatement =
 
             //print_r($q); die();
 
-            $this->Pdo->prepare($q)->execute();
+            $sth->execute();
             //$PdoStatement->bindParam(':dbName', $dbName, PDO::PARAM_STR);
             //$PdoStatement->execute();
             //$tablesStr = @reset($PdoStatement->fetch(PDO::FETCH_ASSOC));
@@ -231,14 +277,17 @@ class PopulateDb {
 
 }
 
+ini_set('max_execution_time', 3600);
+
 $dbHost = "localhost";
 $dbName = "pdarbais";
 $dbUsername = "pdarbais";
 $dbPassword = "pdarbais";
 $tables = array();
+$tablesToSkip = array('acctypes', 'cats', 'fbcache', 'settings');
 $randomRowsPerTableCount = 1000;
 
-$Pdo = new PDO("mysql:host=$dbHost;dbname=$dbName",$dbUsername,$dbPassword);
+$Pdo = new PDO("mysql:host=$dbHost;dbname=$dbName;charset=UTF8",$dbUsername,$dbPassword);
 $Pdb = new PopulateDb($Pdo, new RandomValue($Pdo));
 
 
@@ -248,6 +297,9 @@ if(empty($tables)) { // Get all tables of $dbName
 }
 
 foreach($tables as $tableName) {
+    if(in_array($tableName, $tablesToSkip)) {
+        continue;
+    }
     $Pdb->populateTable($tableName, $randomRowsPerTableCount);
 }
 
